@@ -59,7 +59,7 @@ describe("Auth Middleware", () => {
   });
 
   describe("apiKeyAuth", () => {
-    test("accepts valid API key with username header", async () => {
+    test("accepts valid API key but ignores client-asserted username header", async () => {
       const res = await app.request("/api-key-test", {
         headers: {
           Authorization: "Bearer test-api-key",
@@ -68,16 +68,16 @@ describe("Auth Middleware", () => {
       });
       expect(res.status).toBe(200);
       const body = await res.json();
-      expect(body.username).toBe("alice");
+      expect(body.username).toBeNull();
     });
 
-    test("accepts valid API key with username query param", async () => {
+    test("accepts valid API key but ignores client-asserted username query param", async () => {
       const res = await app.request("/api-key-test?username=bob", {
         headers: { Authorization: "Bearer test-api-key" },
       });
       expect(res.status).toBe(200);
       const body = await res.json();
-      expect(body.username).toBe("bob");
+      expect(body.username).toBeNull();
     });
 
     test("accepts valid session token", async () => {

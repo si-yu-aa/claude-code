@@ -500,37 +500,34 @@ describe("Web Auth Routes", () => {
     app = createApp();
   });
 
-  test("POST /web/bind — binds session to UUID", async () => {
-    // Create session first
-    const sessRes = await app.request("/v1/sessions", {
-      method: "POST",
-      headers: { ...AUTH_HEADERS, "Content-Type": "application/json" },
-      body: JSON.stringify({}),
-    });
-    const { id } = await sessRes.json();
+  test("POST /web/bind — binds authenticated user's session to UUID", async () => {
+    const session = storeCreateSession({ username: "alice" });
+    const token = issueToken("alice").token;
 
     const bindRes = await app.request("/web/bind?uuid=test-uuid", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ sessionId: id }),
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ sessionId: session.id }),
     });
     expect(bindRes.status).toBe(200);
     const body = await bindRes.json();
     expect(body.ok).toBe(true);
   });
 
-  test("POST /web/bind — binds compat code session ID to UUID", async () => {
-    const sessRes = await app.request("/v1/code/sessions", {
-      method: "POST",
-      headers: { ...AUTH_HEADERS, "Content-Type": "application/json" },
-      body: JSON.stringify({}),
-    });
-    const body = await sessRes.json();
-    const compatId = toWebSessionId(body.session.id);
+  test("POST /web/bind — binds compat code session ID when authenticated user owns it", async () => {
+    const session = storeCreateSession({ idPrefix: "cse_", username: "alice" });
+    const compatId = toWebSessionId(session.id);
+    const token = issueToken("alice").token;
 
     const bindRes = await app.request("/web/bind?uuid=test-uuid", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
       body: JSON.stringify({ sessionId: compatId }),
     });
     expect(bindRes.status).toBe(200);
@@ -540,18 +537,63 @@ describe("Web Auth Routes", () => {
   });
 
   test("POST /web/bind — 404 for unknown session", async () => {
+    const token = issueToken("alice").token;
     const res = await app.request("/web/bind?uuid=test-uuid", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
       body: JSON.stringify({ sessionId: "nope" }),
     });
     expect(res.status).toBe(404);
   });
 
-  test("POST /web/bind — 400 when missing params", async () => {
-    const res = await app.request("/web/bind", {
+  test("POST /web/bind — rejects unauthenticated bind attempts", async () => {
+    const session = storeCreateSession({ username: "alice" });
+    const res = await app.request("/web/bind?uuid=test-uuid", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ sessionId: session.id }),
+    });
+    expect(res.status).toBe(401);
+  });
+
+  test("POST /web/bind — rejects binding another user's session", async () => {
+    const session = storeCreateSession({ username: "alice" });
+    const token = issueToken("bob").token;
+    const res = await app.request("/web/bind?uuid=test-uuid", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ sessionId: session.id }),
+    });
+    expect(res.status).toBe(403);
+  });
+
+  test("POST /web/bind — rejects API key auth without trusted user identity", async () => {
+    const session = storeCreateSession({ username: "alice" });
+    const res = await app.request("/web/bind?uuid=test-uuid", {
+      method: "POST",
+      headers: {
+        ...AUTH_HEADERS,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ sessionId: session.id }),
+    });
+    expect(res.status).toBe(400);
+  });
+
+  test("POST /web/bind — 400 when missing params", async () => {
+    const token = issueToken("alice").token;
+    const res = await app.request("/web/bind", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
       body: JSON.stringify({}),
     });
     expect(res.status).toBe(400);

@@ -14,7 +14,7 @@ function extractBearerToken(c: Context): string | undefined {
  * Unified authentication middleware — supports two modes:
  *
  * 1. **Token mode** (Web UI): Bearer token resolved via server-side lookup → username injected
- * 2. **API Key mode** (CLI bridge): Valid API key + X-Username header → username injected
+ * 2. **API Key mode** (CLI bridge): Valid API key accepted, but no client-asserted username is trusted
  */
 export async function apiKeyAuth(c: Context, next: Next) {
   const token = extractBearerToken(c);
@@ -29,11 +29,6 @@ export async function apiKeyAuth(c: Context, next: Next) {
 
   // Try API Key authentication (CLI bridge)
   if (validateApiKey(token)) {
-    // Extract username from X-Username header or ?username= query param
-    const username = c.req.header("X-Username") || c.req.query("username");
-    if (username) {
-      c.set("username", username);
-    }
     await next();
     return;
   }
